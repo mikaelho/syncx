@@ -1,2 +1,3 @@
 dictdiffer
+ProxyTypes
 pyyaml

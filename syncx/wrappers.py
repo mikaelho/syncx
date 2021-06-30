@@ -1,29 +1,16 @@
 #coding: utf-8
+"""
+Proxy wrappers for different data types to detect any changes.
+"""
 
 import copy
 import functools
-from types import SimpleNamespace
 from typing import Any
 from typing import MutableMapping
 from typing import MutableSequence
 from typing import MutableSet
 
-import dictdiffer
-
-from syncx.vendored.proxies import ObjectWrapper
-
-def synchronized(func):
-    """ Decorator for making wrapper functions, i.e.
-    all access and updates, thread safe. """
-    @functools.wraps(func)
-    def _wrapper(self, *args, **kwargs):
-        handler = self._tracker.handler
-        if handler.lock:
-            with self._tracker.handler.lock:
-                return func(self, *args, **kwargs)
-        else:
-            return func(self, *args, **kwargs)
-    return _wrapper
+from peak.util.proxies import ObjectWrapper
 
 
 class TrackerWrapper(ObjectWrapper):
@@ -31,11 +18,17 @@ class TrackerWrapper(ObjectWrapper):
     _tracker = None
 
     def __init__(self, obj, path, callback, osa=object.__setattr__):
-        ObjectWrapper.__init__(self, obj)
+        super().__init__(obj)
 
         osa(self, '_callback', functools.partial(callback, path))
 
+    def __repr__(self):
+        return self.__subject__.__repr__()
+
     def __deepcopy__(self, memo):
+        """
+        Deepcopy mechanism is used to unwrap the wrapped data structure.
+        """
         return copy.deepcopy(self.__subject__, memo)
 
     # def __enter__(self):
@@ -48,60 +41,32 @@ class TrackerWrapper(ObjectWrapper):
     #     if handler.lock:
     #         handler.lock.release()
 
-    def __repr__(self):
-        return self.__subject__.__repr__()
-
 
 def is_tracked(obj):
     return isinstance(obj, TrackerWrapper)
 
 
 class DictWrapper(TrackerWrapper):
-    pass
+    """
+    Wrapper for MutableMappings.
+    """
 
 
-class DictWrapper_Dot(DictWrapper):
-
-    @synchronized
-    def __getitem__(self, key):
-        value = self.__subject__[key]
-        # if isinstance(value, LazyLoadMarker):
-        #     value = self._tracker.handler.load(key, self._tracker.path)
-        #     self.__subject__[key] = value
-        return value
-
-    @synchronized
-    def __getattr__(self, key):
-        if key in self:
-            return self[key]
-        if hasattr(self, '__subject__'):
-            return getattr(self.__subject__, key)
-        raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, key))
-
-    @synchronized
-    def __setattr__(self, key, value):
-        self[key] = value
-
-    @synchronized
-    def __delattr__(self, key):
-        if key in self:
-            del self[key]
-            return
-        if hasattr(self, '__subject__'):
-            delattr(self.__subject__, key)
-            return
-        raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, key))
+class ListWrapper(TrackerWrapper):
+    """
+    Wrapper for MutableSequences.
+    """
 
 
-class ListWrapper(TrackerWrapper): pass
-
-
-class SetWrapper(TrackerWrapper): pass
+class SetWrapper(TrackerWrapper):
+    """
+    Wrapper for MutableSets.
+    """
 
 
 class CustomObjectWrapper(TrackerWrapper):
     """ If an object has a __dict__ attribute, we track attribute changes. """
-    pass
+
 
 trackable_types = {
   MutableSequence: ListWrapper,
@@ -110,7 +75,7 @@ trackable_types = {
 }
 
 mutating_methods = {
-  CustomObjectWrapper: [ '__setattr__'],
+  CustomObjectWrapper: ['__setattr__', '__delattr__'],
   DictWrapper:
     ['__setitem__', '__delitem__', 'pop', 'popitem', 'clear', 'update', 'setdefault'],
   ListWrapper:
@@ -124,15 +89,18 @@ mutating_methods = {
 for wrapper_type in mutating_methods:
     for func_name in mutating_methods[wrapper_type]:
         def func(self, *args, tracker_function_name=func_name, **kwargs):
+            if tracker_function_name == '__setattr__' and args[0] == '__subject__':
+                return ObjectWrapper.__setattr__(self, *args, **kwargs)
             return_value = getattr(self.__subject__, tracker_function_name)(*args, **kwargs)
-            wrap_members(self)
-            self._callback(function_name=tracker_function_name, args=args, kwargs=kwargs)
+            if tracker_function_name not in ('__setattr__', '__delattr__') or not args[0].startswith('_'):
+                wrap_members(self)
+                self._callback(function_name=tracker_function_name, args=args, kwargs=kwargs)
             return return_value
         setattr(wrapper_type, func_name, func)
         getattr(wrapper_type, func_name).__name__ = func_name
 
 
-def wrap_target(target: Any, callback: callable, path: list = None) -> TrackerWrapper:
+def wrap(target: Any, callback: callable, path: list = None) -> TrackerWrapper:
     """
     Wrap target in a proxy that will call the callback whenever tracked object is changed.
     """
@@ -142,15 +110,24 @@ def wrap_target(target: Any, callback: callable, path: list = None) -> TrackerWr
     for abc, wrapper in trackable_types.items():
         if isinstance(target, abc):
             tracked = wrapper(target, path, callback)
+    else:
+        if hasattr(target, "__dict__"):
+            tracked = CustomObjectWrapper(target, path, callback)
 
-    if tracked is None and hasattr(target, "__dict__"):
-        tracked = CustomObjectWrapper(target, path, callback)
+    if tracked is None:
+        raise TypeError(f"'{target}' does not have a trackable type: {type(target)}")
 
-    if tracked is not None:
-        wrap_members(tracked)
-        return tracked
+    wrap_members(tracked)
 
-    raise TypeError(f"'{target}' does not have a trackable type: {type(target)}")
+    return tracked
+
+
+
+def unwrap(tracked):
+    """
+    Returns the original data structure, with tracking wrappers removed.
+    """
+    return copy.deepcopy(tracked)
 
 
 def wrap_members(tracked: TrackerWrapper):
@@ -158,32 +135,37 @@ def wrap_members(tracked: TrackerWrapper):
     Checks to see if some of the changed node's contents now need to be tracked.
     """
     to_wrap = []
-    callback_func = tracked._callback.func
+    callback = tracked._callback
     for key, value in get_iterable(tracked.__subject__):
-        if should_wrap(value):
+        if is_tracked(value):
+            existing_callback = value._callback
+            if existing_callback.func != callback.func or existing_callback.args[0] != callback.args[0] + [key]:
+                to_wrap.append((key, value.__subject__))
+        elif should_wrap(value):
             to_wrap.append((key, value))
-        elif is_tracked(value):
-            value_callback = value._callback
-            value_callback.args = (value_callback.args[0] + [key],)
     for key, value in to_wrap:
         set_value(
             tracked.__subject__,
             key,
             value,
-            wrap_target(value, callback_func, tracked._callback.args[0] + [key]),
+            wrap(value, callback.func, callback.args[0] + [key]),
         )
 
 
 def get_iterable(obj):
-    """ Attempts to return a (key, value) iterator regardless of object type. """
+    """
+    Attempts to return a (key, value) iterator regardless of object type.
+
+    For class instances, only returns attributes that do not start with '_' (public attributes).
+    """
     if isinstance(obj, MutableSequence):
-        return list(enumerate(obj))
+        return enumerate(obj)
     elif isinstance(obj, MutableMapping):
-        return list(obj.items())
+        return obj.items()
     elif isinstance(obj, MutableSet):
-        return [(value, value) for value in obj]
+        return ((value, value) for value in obj)
     elif hasattr(obj, "__dict__"):
-        return list(obj.__dict__.items())
+        return ((key, value) for key, value in obj.__dict__.items() if not key.startswith('_'))
     else:
         raise TypeError(f'Cannot return an iterator for type {type(obj)}')
 
@@ -209,6 +191,6 @@ def set_value(target, key, old_value, new_value):
         target.remove(old_value)
         target.add(new_value)
     elif hasattr(target, "__dict__"):
-        object.setattr(target, key, new_value)
+        object.__setattr__(target, key, new_value)
     else:
         raise TypeError(f'Cannot set value for type {type(target)}')
