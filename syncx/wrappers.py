@@ -9,18 +9,22 @@ from typing import Any
 from typing import MutableMapping
 from typing import MutableSequence
 from typing import MutableSet
+from typing import TypeVar
 
 from peak.util.proxies import ObjectWrapper
 
+from syncx.manager import Manager
 
-class TrackerWrapper(ObjectWrapper):
+T = TypeVar('T')
 
-    _tracker = None
 
-    def __init__(self, obj, path, callback, osa=object.__setattr__):
+class NotifyWrapper(ObjectWrapper):
+
+    def __init__(self, obj, path, manager, osa=object.__setattr__):
         super().__init__(obj)
 
-        osa(self, '_callback', functools.partial(callback, path))
+        osa(self, '_path',  path)
+        osa(self, '_manager', manager)
 
     def __repr__(self):
         return self.__subject__.__repr__()
@@ -43,28 +47,28 @@ class TrackerWrapper(ObjectWrapper):
 
 
 def is_tracked(obj):
-    return isinstance(obj, TrackerWrapper)
+    return isinstance(obj, NotifyWrapper)
 
 
-class DictWrapper(TrackerWrapper):
+class DictWrapper(NotifyWrapper):
     """
     Wrapper for MutableMappings.
     """
 
 
-class ListWrapper(TrackerWrapper):
+class ListWrapper(NotifyWrapper):
     """
     Wrapper for MutableSequences.
     """
 
 
-class SetWrapper(TrackerWrapper):
+class SetWrapper(NotifyWrapper):
     """
     Wrapper for MutableSets.
     """
 
 
-class CustomObjectWrapper(TrackerWrapper):
+class CustomObjectWrapper(NotifyWrapper):
     """ If an object has a __dict__ attribute, we track attribute changes. """
 
 
@@ -76,12 +80,15 @@ trackable_types = {
 
 mutating_methods = {
   CustomObjectWrapper: ['__setattr__', '__delattr__'],
-  DictWrapper:
-    ['__setitem__', '__delitem__', 'pop', 'popitem', 'clear', 'update', 'setdefault'],
-  ListWrapper:
-    ['__setitem__', '__delitem__', 'insert', 'append', 'reverse', 'extend', 'pop', 'remove', 'clear', '__iadd__'],
-  SetWrapper:
-    ['add', 'discard', 'clear', 'pop', 'remove', '__ior__', '__iand__', '__ixor__', '__isub__']
+  DictWrapper: [
+      '__setitem__', '__delitem__', 'pop', 'popitem', 'clear', 'update', 'setdefault',
+  ],
+  ListWrapper: [
+      '__setitem__', '__delitem__', 'insert', 'append', 'reverse', 'extend', 'pop', 'remove', 'clear', '__iadd__',
+  ],
+  SetWrapper: [
+      'add', 'discard', 'clear', 'pop', 'remove', '__ior__', '__iand__', '__ixor__', '__isub__',
+  ],
 }
 
 # Add tracking wrappers to all mutating functions.
@@ -94,25 +101,30 @@ for wrapper_type in mutating_methods:
             return_value = getattr(self.__subject__, tracker_function_name)(*args, **kwargs)
             if tracker_function_name not in ('__setattr__', '__delattr__') or not args[0].startswith('_'):
                 wrap_members(self)
-                self._callback(function_name=tracker_function_name, args=args, kwargs=kwargs)
+                self._manager.on_change(self._path, function_name=tracker_function_name, args=args, kwargs=kwargs)
             return return_value
         setattr(wrapper_type, func_name, func)
         getattr(wrapper_type, func_name).__name__ = func_name
 
 
-def wrap(target: Any, callback: callable, path: list = None) -> TrackerWrapper:
+def wrap(target: T, change_callback: callable = None, path: list = None, manager: Manager = None) -> T:
     """
     Wrap target in a proxy that will call the callback whenever tracked object is changed.
+
+    Return value is a proxy type, but type hinted to match the wrapped object for editor convenience.
     """
+    return wrap_target(target, [], Manager(change_callback=change_callback))
+
+
+def wrap_target(target: T, path: list, manager: Manager) -> T:
     tracked = None
-    path = path or []
 
     for abc, wrapper in trackable_types.items():
         if isinstance(target, abc):
-            tracked = wrapper(target, path, callback)
+            tracked = wrapper(target, path, manager)
     else:
         if hasattr(target, "__dict__"):
-            tracked = CustomObjectWrapper(target, path, callback)
+            tracked = CustomObjectWrapper(target, path, manager)
 
     if tracked is None:
         raise TypeError(f"'{target}' does not have a trackable type: {type(target)}")
@@ -122,7 +134,6 @@ def wrap(target: Any, callback: callable, path: list = None) -> TrackerWrapper:
     return tracked
 
 
-
 def unwrap(tracked):
     """
     Returns the original data structure, with tracking wrappers removed.
@@ -130,16 +141,16 @@ def unwrap(tracked):
     return copy.deepcopy(tracked)
 
 
-def wrap_members(tracked: TrackerWrapper):
+def wrap_members(tracked: NotifyWrapper):
     """
     Checks to see if some of the changed node's contents now need to be tracked.
     """
     to_wrap = []
-    callback = tracked._callback
+    path = tracked._path
     for key, value in get_iterable(tracked.__subject__):
         if is_tracked(value):
-            existing_callback = value._callback
-            if existing_callback.func != callback.func or existing_callback.args[0] != callback.args[0] + [key]:
+            updated_path = path + [key]
+            if value._path != updated_path:
                 to_wrap.append((key, value.__subject__))
         elif should_wrap(value):
             to_wrap.append((key, value))
@@ -148,7 +159,7 @@ def wrap_members(tracked: TrackerWrapper):
             tracked.__subject__,
             key,
             value,
-            wrap(value, callback.func, callback.args[0] + [key]),
+            wrap_target(value, path + [key], tracked._manager),
         )
 
 
@@ -171,7 +182,7 @@ def get_iterable(obj):
 
 
 def should_wrap(contained):
-    if isinstance(contained, TrackerWrapper):
+    if isinstance(contained, NotifyWrapper):
         return False
 
     if isinstance(contained, tuple(trackable_types.keys())):

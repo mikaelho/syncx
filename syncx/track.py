@@ -10,7 +10,7 @@ except ImportError:
 else:
     is_pydantic_available = True
 
-from syncx.wrappers import TrackerWrapper
+from syncx.wrappers import NotifyWrapper
 
 
 def track(target: Any, change_callback: callable):
@@ -18,7 +18,7 @@ def track(target: Any, change_callback: callable):
 
 
 def is_tracked(obj: Any) -> bool:
-    return issubclass(type(obj), TrackerWrapper)
+    return issubclass(type(obj), NotifyWrapper)
 
 
 def is_trackable(target: Any) -> bool:

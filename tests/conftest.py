@@ -1,5 +1,6 @@
 import json
 import logging
+from collections import namedtuple
 from pathlib import Path
 from typing import Sequence
 from typing import Union
@@ -18,6 +19,8 @@ def any():
     return Any()
 
 
+Call = namedtuple('Call', 'args kwargs')
+
 class MockFunc:
 
     def __init__(self):
@@ -27,7 +30,7 @@ class MockFunc:
     def __call__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
-        self.calls.append((args or None, kwargs or None))
+        self.calls.append(Call(args or None, kwargs or None))
 
         if hasattr(self, 'return_value'):
             return self.return_value

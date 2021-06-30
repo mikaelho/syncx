@@ -9,10 +9,10 @@ def test_dict(mock_simple):
     wrapped['key'] = 'value'
 
     assert len(mock_simple.calls) == 1
-    keys, mutation = mock_simple.calls[0]
-    assert keys == ([],)
-    assert mutation['function_name'] == '__setitem__'
-    assert mutation['args'] == ('key', 'value')
+    path, function_name, args, kwargs = mock_simple.calls[0].args
+    assert path == []
+    assert function_name == '__setitem__'
+    assert args == ('key', 'value')
 
 
 def test_list(mock_simple):
@@ -20,10 +20,10 @@ def test_list(mock_simple):
     wrapped.append('value')
 
     assert len(mock_simple.calls) == 1
-    keys, mutation = mock_simple.calls[0]
-    assert keys == ([],)
-    assert mutation['function_name'] == 'append'
-    assert mutation['args'] == ('value',)
+    path, function_name, args, kwargs = mock_simple.calls[0].args
+    assert path == []
+    assert function_name == 'append'
+    assert args == ('value',)
 
 
 def test_set(mock_simple):
@@ -31,10 +31,10 @@ def test_set(mock_simple):
     wrapped.add('value')
 
     assert len(mock_simple.calls) == 1
-    keys, mutation = mock_simple.calls[0]
-    assert keys == ([],)
-    assert mutation['function_name'] == 'add'
-    assert mutation['args'] == ('value',)
+    path, function_name, args, kwargs = mock_simple.calls[0].args
+    assert path == []
+    assert function_name == 'add'
+    assert args == ('value',)
 
 
 def test_custom_object(mock_simple):
@@ -42,22 +42,20 @@ def test_custom_object(mock_simple):
     wrapped.test = 'new value'
 
     assert len(mock_simple.calls) == 1
-    keys, mutation = mock_simple.calls[0]
-    assert keys == ([],)
-    assert mutation['function_name'] == '__setattr__'
-    assert mutation['args'] == ('test', 'new value')
+    path, function_name, args, kwargs = mock_simple.calls[0].args
+    assert path == []
+    assert function_name == '__setattr__'
+    assert args == ('test', 'new value')
 
 
 def test_multiple_levels(catcher):
-    wrapped = wrap(
-        SimpleNamespace(
-            data={
-                'key': [
-                    'value1',
-                ]
-            }
-        ),
-        catcher.changed
+    wrapped = wrap(SimpleNamespace(
+        data={
+            'key': [
+                'value1',
+            ]
+        }
+    ), catcher.changed
     )
     wrapped.data['key'].append(set())
     wrapped.data['key'][1].add('value2')
