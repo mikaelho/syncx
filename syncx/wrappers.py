@@ -101,19 +101,19 @@ for wrapper_type in mutating_methods:
             return_value = getattr(self.__subject__, tracker_function_name)(*args, **kwargs)
             if tracker_function_name not in ('__setattr__', '__delattr__') or not args[0].startswith('_'):
                 wrap_members(self)
-                self._manager.on_change(self._path, function_name=tracker_function_name, args=args, kwargs=kwargs)
+                self._manager.did_change(self, path(self), tracker_function_name, args, kwargs)
             return return_value
         setattr(wrapper_type, func_name, func)
         getattr(wrapper_type, func_name).__name__ = func_name
 
 
-def wrap(target: T, change_callback: callable = None, path: list = None, manager: Manager = None) -> T:
+def wrap(target: T, change_callback: callable = None, manager: Manager = None) -> T:
     """
     Wrap target in a proxy that will call the callback whenever tracked object is changed.
 
     Return value is a proxy type, but type hinted to match the wrapped object for editor convenience.
     """
-    return wrap_target(target, [], Manager(change_callback=change_callback))
+    return wrap_target(target, [], manager or Manager(change_callback=change_callback))
 
 
 def wrap_target(target: T, path: list, manager: Manager) -> T:
@@ -205,3 +205,7 @@ def set_value(target, key, old_value, new_value):
         object.__setattr__(target, key, new_value)
     else:
         raise TypeError(f'Cannot set value for type {type(target)}')
+
+
+def path(tracked):
+    return tracked._path

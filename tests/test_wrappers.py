@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
+
+from syncx import path
 from syncx.wrappers import unwrap
 from syncx.wrappers import wrap
 
@@ -9,10 +12,9 @@ def test_dict(mock_simple):
     wrapped['key'] = 'value'
 
     assert len(mock_simple.calls) == 1
-    path, function_name, args, kwargs = mock_simple.calls[0].args
-    assert path == []
-    assert function_name == '__setitem__'
-    assert args == ('key', 'value')
+    obj = mock_simple.calls[0].args[0]
+    assert obj is wrapped
+    assert path(obj) == []
 
 
 def test_list(mock_simple):
@@ -20,10 +22,9 @@ def test_list(mock_simple):
     wrapped.append('value')
 
     assert len(mock_simple.calls) == 1
-    path, function_name, args, kwargs = mock_simple.calls[0].args
-    assert path == []
-    assert function_name == 'append'
-    assert args == ('value',)
+    obj = mock_simple.calls[0].args[0]
+    assert obj is wrapped
+    assert path(obj) == []
 
 
 def test_set(mock_simple):
@@ -31,10 +32,9 @@ def test_set(mock_simple):
     wrapped.add('value')
 
     assert len(mock_simple.calls) == 1
-    path, function_name, args, kwargs = mock_simple.calls[0].args
-    assert path == []
-    assert function_name == 'add'
-    assert args == ('value',)
+    obj = mock_simple.calls[0].args[0]
+    assert obj is wrapped
+    assert path(obj) == []
 
 
 def test_custom_object(mock_simple):
@@ -42,10 +42,9 @@ def test_custom_object(mock_simple):
     wrapped.test = 'new value'
 
     assert len(mock_simple.calls) == 1
-    path, function_name, args, kwargs = mock_simple.calls[0].args
-    assert path == []
-    assert function_name == '__setattr__'
-    assert args == ('test', 'new value')
+    obj = mock_simple.calls[0].args[0]
+    assert obj is wrapped
+    assert path(obj) == []
 
 
 def test_multiple_levels(catcher):
@@ -70,7 +69,6 @@ def test_same_object_different_paths(catcher):
     root['a']['aa'] = 1
     root['b']['aa'] = 2
     root['a']['aa'] = 3
-
 
     assert catcher.paths == [[], ['a'], ['b'], ['a']]  # Different paths preserved
     assert root['a'] == root['b']  # But same object

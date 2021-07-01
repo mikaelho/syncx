@@ -32,3 +32,9 @@ def test_any(mock_func, any):
     SampleClass().sample_method('000', kwarg='123')
 
     assert mock.calls == [((any,), {'kwarg': '123'})]
+
+
+def test_multiline_cleaner(multiline_cleaner):
+    assert multiline_cleaner('''
+        abracadabra
+    ''') == 'abracadabra'

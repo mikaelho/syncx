@@ -2,10 +2,13 @@ import json
 import logging
 from collections import namedtuple
 from pathlib import Path
+from textwrap import dedent
 from typing import Sequence
 from typing import Union
 
 import pytest
+
+from syncx import path
 
 
 @pytest.fixture
@@ -74,6 +77,11 @@ def path_to_test_data() -> Path:
 
 
 @pytest.fixture
+def get_test_file(path_to_test_data):
+    return lambda filename: (path_to_test_data / filename).read_text()
+
+
+@pytest.fixture
 def get_test_data(path_to_test_data):
     return lambda filename: json.loads((path_to_test_data / filename).read_text())
 
@@ -83,14 +91,16 @@ def catcher():
     class Catcher:
         def __init__(self):
             self.paths = []
-            self.function_names = []
-            self.args_list = []
-            self.kwargs_list = []
 
-        def changed(self, path, function_name, args, kwargs):
-            self.paths.append(path)
-            self.function_names.append(function_name)
-            self.args_list.append(args)
-            self.kwargs_list.append(kwargs)
+        def changed(self, obj):
+            self.paths.append(path(obj))
 
     return Catcher()
+
+
+@pytest.fixture
+def multiline_cleaner():
+    def cleaner(text: str) -> str:
+        text = ''.join(line for line in text.splitlines(keepends=True) if line.strip() != '')
+        return dedent(text)
+    return cleaner
