@@ -58,9 +58,17 @@ assert my_data['value'] == 'changed'
 
 ### Use a different serializer
 
->>> syncx.set_serializer(my_new_run_data, syncx.JsonSerializer)
->>> my_new_run_data['a'][0] = 'f'
->>> Path('synx_default.json').read_text()
+```python
+from pathlib import Path
+import syncx
+from syncx.serializer import JsonSerializer
 
+my_data = syncx.sync({'value': 'initial'}, serializer=JsonSerializer)
+my_data['value'] = 'changed'
 
-(Alas, `set`s not supported in json.)
+print(Path('syncx_data.json').read_text())
+# prints file contents:
+# {"value":"changed"}
+```
+
+(Alas, `set` is not supported in json. `ujson` is used if installed.)

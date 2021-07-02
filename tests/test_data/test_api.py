@@ -48,3 +48,18 @@ def test_sync__next_run(run_in_tmp_path):
 
     my_data = syncx.sync({'value': 'initial'})
     assert my_data['value'] == 'changed'
+
+
+def test_sync__with_json(run_in_tmp_path, capsys):
+    from pathlib import Path
+    import syncx
+    from syncx.serializer import JsonSerializer
+
+    my_data = syncx.sync({'value': 'initial'}, serializer=JsonSerializer)
+    my_data['value'] = 'changed'
+
+    print(Path('syncx_data.json').read_text())
+    # prints file contents:
+    # {"value":"changed"}
+
+    assert capsys.readouterr().out.strip() == '{"value":"changed"}'
