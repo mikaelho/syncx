@@ -4,8 +4,6 @@ Proxy wrappers for different data types to detect any changes.
 """
 
 import copy
-import functools
-from typing import Any
 from typing import MutableMapping
 from typing import MutableSequence
 from typing import MutableSet
@@ -13,7 +11,6 @@ from typing import TypeVar
 
 from peak.util.proxies import ObjectWrapper
 
-from syncx.manager import Manager
 
 T = TypeVar('T')
 
@@ -46,7 +43,7 @@ class NotifyWrapper(ObjectWrapper):
     #         handler.lock.release()
 
 
-def is_tracked(obj):
+def is_wrapped(obj):
     return isinstance(obj, NotifyWrapper)
 
 
@@ -70,6 +67,13 @@ class SetWrapper(NotifyWrapper):
 
 class CustomObjectWrapper(NotifyWrapper):
     """ If an object has a __dict__ attribute, we track attribute changes. """
+
+
+def path(tracked: NotifyWrapper) -> list:
+    """
+    Returns tuple of the keys from the root of the data structure to the given object.
+    """
+    return tracked._path
 
 
 trackable_types = {
@@ -107,16 +111,7 @@ for wrapper_type in mutating_methods:
         getattr(wrapper_type, func_name).__name__ = func_name
 
 
-def wrap(target: T, change_callback: callable = None, manager: Manager = None) -> T:
-    """
-    Wrap target in a proxy that will call the callback whenever tracked object is changed.
-
-    Return value is a proxy type, but type hinted to match the wrapped object for editor convenience.
-    """
-    return wrap_target(target, [], manager or Manager(change_callback=change_callback))
-
-
-def wrap_target(target: T, path: list, manager: Manager) -> T:
+def wrap_target(target: T, path: list, manager: 'Manager') -> T:
     tracked = None
 
     for abc, wrapper in trackable_types.items():
@@ -129,16 +124,11 @@ def wrap_target(target: T, path: list, manager: Manager) -> T:
     if tracked is None:
         raise TypeError(f"'{target}' does not have a trackable type: {type(target)}")
 
+    if not path:
+        manager.root = tracked
     wrap_members(tracked)
 
     return tracked
-
-
-def unwrap(tracked):
-    """
-    Returns the original data structure, with tracking wrappers removed.
-    """
-    return copy.deepcopy(tracked)
 
 
 def wrap_members(tracked: NotifyWrapper):
@@ -148,7 +138,7 @@ def wrap_members(tracked: NotifyWrapper):
     to_wrap = []
     path = tracked._path
     for key, value in get_iterable(tracked.__subject__):
-        if is_tracked(value):
+        if is_wrapped(value):
             updated_path = path + [key]
             if value._path != updated_path:
                 to_wrap.append((key, value.__subject__))
@@ -205,7 +195,3 @@ def set_value(target, key, old_value, new_value):
         object.__setattr__(target, key, new_value)
     else:
         raise TypeError(f'Cannot set value for type {type(target)}')
-
-
-def path(tracked):
-    return tracked._path

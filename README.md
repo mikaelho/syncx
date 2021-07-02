@@ -11,41 +11,50 @@ data whenever it is changed.
 
 ### Detect changes
 
-Any change to a wrapped data structure triggers a callback (here `print`).
+Any change to a wrapped data structure triggers a callback (here we use `print` to keep the example
+simple).
 
 ```python
->>> import syncx
->>> my_data = {'a': ['b', {'c': 0}]}
->>> my_data = syncx.wrap(my_data, print)
->>> my_data['a'][1]['d'] = 1
-{'c': 0, 'd': 1}
+import syncx
 
+my_data = {'a': ['b', {'c': 0}]}
+my_data = syncx.wrap(my_data, print)
+my_data['a'][1]['d'] = 1
+# prints: {'c': 0, 'd': 1}
 ```
 
-> Trackable data types: `dict`s (mappings), `list`s (sequences), `set`s, instances with `__dict__`,
-> others.
+Trackable data types: `dict`s (mappings), `list`s (sequences), `set`s, instances with `__dict__`,
+others.
 
-### Sync all changes to YAML file
+### Sync all changes to a YAML file
 
->>> syncx.sync(my_data)
->>> my_data['e'] = {1}
->>>
->>> from pathlib import Path
->>> Path('syncx_data.yaml').read_text()
-a:
-- b
-- c: 0
-  d: 1
-e: !!set
-  1: null
+```python
+import syncx
+from pathlib import Path
 
-### Load up data on the next run
+my_data = syncx.sync({'value': 'initial'})
 
->>> my_new_run_data = syncx.sync({'a': 'Default value if no previous data found'})
->>> my_new_run_data['a'][0]
-'b'
+print(Path('syncx_data.yaml').read_text())
+# prints file contents:
+# value: initial
 
-    Already pretty functional for applications with modest amount of data.
+my_data['value'] = 'changed'
+
+print(Path('syncx_data.yaml').read_text())
+# prints file contents:
+# value: changed
+```
+
+### Next run picks up the changed data
+
+```python
+import syncx
+
+my_data = syncx.sync({'value': 'initial'})
+assert my_data['value'] == 'changed'
+```
+
+(This is already pretty functional for applications with modest amount of data.)
 
 ### Use a different serializer
 
@@ -54,4 +63,4 @@ e: !!set
 >>> Path('synx_default.json').read_text()
 
 
-    Alas, sets not supported in json.
+(Alas, `set`s not supported in json.)

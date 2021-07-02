@@ -1,10 +1,8 @@
 from types import SimpleNamespace
 
-import pytest
-
 from syncx import path
-from syncx.wrappers import unwrap
-from syncx.wrappers import wrap
+from syncx import unwrap
+from syncx import wrap
 
 
 def test_dict(mock_simple):

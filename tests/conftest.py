@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from collections import namedtuple
 from pathlib import Path
 from textwrap import dedent
@@ -77,7 +78,7 @@ def path_to_test_data() -> Path:
 
 
 @pytest.fixture
-def get_test_file(path_to_test_data):
+def get_test_data_file(path_to_test_data):
     return lambda filename: (path_to_test_data / filename).read_text()
 
 
@@ -101,6 +102,13 @@ def catcher():
 @pytest.fixture
 def multiline_cleaner():
     def cleaner(text: str) -> str:
-        text = ''.join(line for line in text.splitlines(keepends=True) if line.strip() != '')
+        text = text.strip('\n')
         return dedent(text)
     return cleaner
+
+
+@pytest.fixture
+def run_in_tmp_path(request, tmp_path):
+    os.chdir(tmp_path)
+    yield
+    os.chdir(request.config.invocation_dir)

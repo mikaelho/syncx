@@ -1,12 +1,32 @@
+import io
+from io import IOBase
+from io import StringIO
 from pathlib import Path
 from typing import Any
+from typing import Protocol
 
 from syncx.serializer import Serializer
 
 
-class Backend:
+def streamify(value: Any) -> io.IOBase:
+    if isinstance(value, io.IOBase):
+        return value
+    elif type(value) is str:
+        return io.StringIO(value)
+    elif type(value) is bytes:
+        return io.BytesIO(value)
+    else:
+        raise TypeError(f'Cannot turn value of type {type(value)} into a stream', value)
 
-    def put(self, value: Any, serializer: Serializer, key: str = None):
+
+class Backend(Protocol):
+
+    def __init__(self, name: str, *args, **kwargs):
+        """
+        Initialize the backend with a name.
+        """
+
+    def put(self, root: Any, serializer: Serializer, change_location: Any = None, key: str = None):
         """
         Write/send value to the backend provider, with an optional key.
         """
@@ -17,25 +37,27 @@ class Backend:
         """
 
 
-class FileBackend(Backend):
+class FileBackend:
 
-    def __init__(self, filename):
-        self.filename = filename
+    def __init__(self, name: str):
+        self.filename = name
 
-    def _get_filename(self, serializer):
-        return f'{self.filename}.{serializer.file_extension}'
+    def _get_file(self, serializer: Serializer) -> Path:
+        return Path(f'{self.filename}.{serializer.file_extension}')
 
-    def put(self, value: Any, serializer: Serializer, key: str = None):
-        filename = self._get_filename(serializer)
-        Path(filename).write_text(serializer.dumps(value))
+    def put(self, root: Any, serializer: Serializer, change_location: Any = None, key: str = None):
+        file = self._get_file(serializer)
+        stream = io.StringIO()
+        serializer.dump(root, stream)
+        file.write_text(stream.getvalue())
 
     def get(self, serializer: Serializer, key: str = None) -> Any:
         """
         Returns the file contents as de-serialized data, or None if file does not exist or is empty.
         """
-        filename = self._get_filename(serializer)
+        file = self._get_file(serializer)
         try:
-            contents = Path(filename).read_text()
-            return serializer.loads(contents)
+            stream = io.StringIO(file.read_text())
+            return serializer.load(stream)
         except (EOFError, FileNotFoundError):
             return None

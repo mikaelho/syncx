@@ -37,4 +37,4 @@ def test_any(mock_func, any):
 def test_multiline_cleaner(multiline_cleaner):
     assert multiline_cleaner('''
         abracadabra
-    ''') == 'abracadabra'
+    ''') == 'abracadabra\n'
