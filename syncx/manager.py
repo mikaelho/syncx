@@ -18,6 +18,8 @@ class Manager:
         self.did_change_callback = did_change_callback
         self.serializer = None
         self.backend = None
+        self.root = None
+        self.root_type = None
 
     def did_change(self, obj, path, function_name, args, kwargs):
         if self.did_change_callback:
@@ -32,7 +34,7 @@ class Manager:
 
     def start_sync(
         self,
-        wrapped: NotifyWrapper,
+        wrapped: Any,
         name: str = None,
         serializer: Serializer = None,
         backend: Backend = None
@@ -48,6 +50,8 @@ class Manager:
         existing_content = self.backend.get(self.serializer)
 
         if existing_content:
+            if self.root_type:
+                existing_content = self.root_type(**existing_content)
             from syncx import wrap
             wrapped = wrap(existing_content)
             self.set_as_manager_for(wrapped)

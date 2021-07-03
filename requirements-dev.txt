@@ -1,4 +1,6 @@
 -r requirements.txt
 
+dataclasses; python_version < '3.7'
+pydantic
 pytest
 pyyaml

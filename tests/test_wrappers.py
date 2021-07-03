@@ -1,48 +1,56 @@
 from types import SimpleNamespace
 
+import pytest
+
 from syncx import path
 from syncx import unwrap
 from syncx import wrap
+
+
+def check_callback(wrapped, callback):
+    assert len(callback.calls) == 1
+    obj = callback.calls[0].args[0]
+    assert obj is wrapped
+    assert path(obj) == []
 
 
 def test_dict(mock_simple):
     wrapped = wrap(dict(), mock_simple)
     wrapped['key'] = 'value'
 
-    assert len(mock_simple.calls) == 1
-    obj = mock_simple.calls[0].args[0]
-    assert obj is wrapped
-    assert path(obj) == []
+    check_callback(wrapped, mock_simple)
 
 
 def test_list(mock_simple):
     wrapped = wrap(list(), mock_simple)
     wrapped.append('value')
 
-    assert len(mock_simple.calls) == 1
-    obj = mock_simple.calls[0].args[0]
-    assert obj is wrapped
-    assert path(obj) == []
+    check_callback(wrapped, mock_simple)
 
 
 def test_set(mock_simple):
     wrapped = wrap(set(), mock_simple)
     wrapped.add('value')
 
-    assert len(mock_simple.calls) == 1
-    obj = mock_simple.calls[0].args[0]
-    assert obj is wrapped
-    assert path(obj) == []
+    check_callback(wrapped, mock_simple)
 
 
 def test_custom_object(mock_simple):
-    wrapped = wrap(SimpleNamespace(test='value'), mock_simple)
-    wrapped.test = 'new value'
+    wrapped = wrap(SimpleNamespace(test='initial value'), mock_simple)
+    wrapped.test = 'value'
 
-    assert len(mock_simple.calls) == 1
-    obj = mock_simple.calls[0].args[0]
-    assert obj is wrapped
-    assert path(obj) == []
+    check_callback(wrapped, mock_simple)
+
+    assert wrapped._manager.root_type is SimpleNamespace
+
+
+def test_type(mock_simple):
+    wrapped = wrap(SimpleNamespace, mock_simple)
+    wrapped.test = 'value'
+
+    check_callback(wrapped, mock_simple)
+
+    assert wrapped._manager.root_type is SimpleNamespace
 
 
 def test_multiple_levels(catcher):

@@ -113,19 +113,25 @@ for wrapper_type in mutating_methods:
 
 def wrap_target(target: T, path: list, manager: 'Manager') -> T:
     tracked = None
+    target_type = None
 
     for abc, wrapper in trackable_types.items():
         if isinstance(target, abc):
             tracked = wrapper(target, path, manager)
     else:
+        if type(target) is type:
+            target = target()
         if hasattr(target, "__dict__"):
             tracked = CustomObjectWrapper(target, path, manager)
+            target_type = type(target)
 
     if tracked is None:
         raise TypeError(f"'{target}' does not have a trackable type: {type(target)}")
 
-    if not path:
+    if not path:  # i.e. root
         manager.root = tracked
+        manager.root_type = target_type
+
     wrap_members(tracked)
 
     return tracked
