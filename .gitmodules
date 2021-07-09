@@ -1,0 +1,3 @@
+[submodule "dictdiffer"]
+	path = dictdiffer
+	url = git@github.com-mikaelho:mikaelho/dictdiffer
