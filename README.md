@@ -1,18 +1,22 @@
-# syncx
-
-### "Always saved" as a developer feature
+# syncx: autosave for developers
 
 When you use any modern editing tool, were it an IDE or an online office document editor, you
 expect the data to be saved as you make changes, without the need to click "Save" every now and
-then.
-
-`syncx` gives that same experience for an application developer, automatically saving the
+then. `syncx` gives that same experience for an application developer, automatically saving the
 application data whenever it is changed.
 
 Main features:
 1. Detect changes to Python data structures, from `dict`s to pydantic models.
-1. Keep the changes saved to a file without any extra code.
-1. Keep a history of changes, with undo/redo.
+1. Changes autosaved to a file.
+1. Undo/redo changes.
+
+## Installation
+
+```
+pypi install syncx
+```
+
+## Functionality
 
 ### Detect changes
 
@@ -152,3 +156,13 @@ Notes:
 - When using strongly-typed data, you need to give `sync` a root model like OrderList in the
   example above. If you give it a list, for example, saving to file will work, but there is not
   enough information to convert the file contents back into an object on the next run.
+
+## Undeveloped ideas
+
+- Support for Django ORM models, with a change callback that saves a Django model to DB
+- Use with a UI framework, autoupdate UI whenever data changes
+- Peer-to-peer syncing of data
+
+## Similar projects
+
+- [CleverDict](https://pypi.org/project/cleverdict/)
