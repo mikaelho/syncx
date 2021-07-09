@@ -6,15 +6,18 @@ import datetime
 import syncx
 
 
-def test_wrap(capsys):
+def test_tag(capsys):
     import syncx
 
-    my_data = {'a': ['b', {'c': 0}]}
-    my_data = syncx.wrap(my_data, print)
-    my_data['a'][1]['d'] = 1
-    # prints: {'c': 0, 'd': 1}
+    def ping(details):
+        print('Data was changed')
 
-    assert capsys.readouterr().out.strip() == "{'c': 0, 'd': 1}"
+    my_data = {'a': ['b', {'c': 0}]}
+    my_data = syncx.tag(my_data, ping)
+    my_data['a'][1]['d'] = 1
+    # prints: Data was changed
+
+    assert capsys.readouterr().out.strip() == "Data was changed"
 
 
 def test_sync__no_previous_file(run_in_tmp_path, capsys, multiline_cleaner):

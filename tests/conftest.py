@@ -91,10 +91,14 @@ def get_test_data(path_to_test_data):
 def catcher():
     class Catcher:
         def __init__(self):
-            self.paths = []
+            self.details_list = []
 
-        def changed(self, obj):
-            self.paths.append(path(obj))
+        def changed(self, details):
+            self.details_list.append(details)
+
+        @property
+        def paths(self):
+            return [details.path_to_location for details in self.details_list]
 
     return Catcher()
 

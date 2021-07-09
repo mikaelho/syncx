@@ -25,10 +25,13 @@ Any change to a wrapped data structure triggers a callback (here we use `print` 
 ```python
 import syncx
 
+def ping(details):
+    print('Data was changed')
+
 my_data = {'a': ['b', {'c': 0}]}
-my_data = syncx.wrap(my_data, print)
+my_data = syncx.tag(my_data, ping)
 my_data['a'][1]['d'] = 1
-# prints: {'c': 0, 'd': 1}
+# prints: Data was changed
 ```
 
 (Supported data types: `dict`s (mappings), `list`s (sequences), `set`s, instances with `__dict__`,

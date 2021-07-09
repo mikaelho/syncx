@@ -1,10 +1,19 @@
+from types import SimpleNamespace
 from typing import Any
 
 from syncx.backend import Backend
 from syncx.backend import FileBackend
 from syncx.serializer import Serializer
 from syncx.serializer import YamlSerializer
-from syncx.wrappers import NotifyWrapper
+
+
+class ChangeDetails(SimpleNamespace):
+    root: Any
+    location: Any
+    path_to_location: list
+    function_name: str
+    args: list
+    kwargs: dict
 
 
 class Manager:
@@ -22,11 +31,19 @@ class Manager:
         self.root_type = None
 
     def did_change(self, obj, path, function_name, args, kwargs):
+        change_details = ChangeDetails(
+            root=self.root,
+            location=obj,
+            path_to_location=path,
+            function_name=function_name,
+            args=args,
+            kwargs=kwargs,
+        )
         if self.did_change_callback:
-            self.did_change_callback(obj)
+            self.did_change_callback(change_details)
 
         if self.backend:
-            self.sync(obj)
+            self.sync(change_details)
 
     def set_as_manager_for(self, root):
         self.root = root
@@ -52,13 +69,13 @@ class Manager:
         if existing_content:
             if self.root_type:
                 existing_content = self.root_type(**existing_content)
-            from syncx import wrap
-            wrapped = wrap(existing_content)
+            from syncx import tag
+            wrapped = tag(existing_content)
             self.set_as_manager_for(wrapped)
         else:
             self.backend.put(wrapped, self.serializer)
 
         return wrapped
 
-    def sync(self, obj: NotifyWrapper):
-        self.backend.put(self.root, self.serializer, change_location=obj)
+    def sync(self, change_details: ChangeDetails):
+        self.backend.put(self.root, self.serializer, change_location=change_details.location)

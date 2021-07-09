@@ -11,25 +11,25 @@ from syncx.wrappers import wrap_target
 T = TypeVar('T')
 
 
-def wrap(target: T, change_callback: callable = None, manager: Manager = None) -> T:
+def tag(target: T, change_callback: callable = None, manager: Manager = None) -> T:
     """
-    Wraps target in a proxy that will call the callback whenever tracked object is changed.
+    Tag target data structure to get notified of any changes.
 
-    Return value is a proxy type, but type hinted to match the wrapped object for editor convenience.
+    Return value is a proxy type, but type hinted to match the tagged object for editor convenience.
     """
     return wrap_target(target, [], manager or Manager(change_callback))
 
 
-def unwrap(tracked):
+def untag(tracked):
     """
-    Returns the original data structure, with tracking wrappers removed.
+    Returns an untagged copy of the data structure.
     """
     return copy.deepcopy(tracked)
 
 
 def sync(target: T, name: str = None, serializer: Serializer = None, backend: Backend = None) -> T:
     if not is_wrapped(target):
-        target = wrap(target)
+        target = tag(target)
     target = target._manager.start_sync(target, name, serializer, backend)
 
     return target
