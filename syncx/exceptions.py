@@ -1,0 +1,1 @@
+class Rollback(Exception): pass

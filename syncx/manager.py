@@ -1,16 +1,26 @@
-from types import SimpleNamespace
+import copy
+import threading
+from dataclasses import dataclass
 from typing import Any
+from typing import Optional
 
+import dictdiffer
 from syncx.backend import Backend
 from syncx.backend import FileBackend
+from syncx.exceptions import Rollback
+from syncx.history import History
 from syncx.serializer import Serializer
 from syncx.serializer import YamlSerializer
+from syncx.wrappers import CustomObjectWrapper
+from syncx.wrappers import is_wrapped
 
 
-class ChangeDetails(SimpleNamespace):
+@dataclass
+class ChangeDetails:
     root: Any
     location: Any
     path_to_location: list
+    delta: Optional[list]
     function_name: str
     args: list
     kwargs: dict
@@ -23,27 +33,64 @@ class Manager:
     default_name = 'syncx_data'
 
     def __init__(self, did_change_callback=None, will_change_callback=None):
+        self.lock = threading.RLock()
+        self.instantiate_root_with_keywords = False
+
         self.will_change_callback = will_change_callback
         self.did_change_callback = did_change_callback
+
         self.serializer = None
         self.backend = None
         self.root = None
         self.root_type = None
 
-    def did_change(self, obj, path, function_name, args, kwargs):
+        self.all_changes = []  # All changes within context, raw appended list
+        self.history = None  # Optional history that can be manipulated with undo and redo
+        self.transactions = []
+
+        self.change_tracking_active = True
+
+    def execute_change(self, path, original_function, args, kwargs):
+
+        if not self.change_tracking_active:
+            return original_function(*args, **kwargs)
+
+        need_all_changes = bool(len(self.transactions))
+        need_history = self.history is not None and self.history.on
+        need_delta = any((need_all_changes, need_history))
+
+        diff_location = dictdiffer.dot_lookup(self.root, path)
+        before_change = need_delta and copy.deepcopy(diff_location)
+
+        return_value = original_function(*args, **kwargs)
+
+        after_change = need_delta and copy.deepcopy(diff_location)
+
+        delta = need_delta and list(dictdiffer.diff(before_change, after_change, node=path))
+
+        if need_all_changes:
+            self.all_changes.append(delta)
+
+        if need_history:
+            self.add_history_entry(delta)
+
         change_details = ChangeDetails(
             root=self.root,
-            location=obj,
+            location=diff_location,
             path_to_location=path,
-            function_name=function_name,
+            delta=delta,
+            function_name=original_function.__name__,
             args=args,
             kwargs=kwargs,
         )
+
         if self.did_change_callback:
             self.did_change_callback(change_details)
 
-        if self.backend:
+        if self.backend and not self.transactions:
             self.sync(change_details)
+
+        return return_value
 
     def set_as_manager_for(self, root):
         self.root = root
@@ -67,8 +114,10 @@ class Manager:
         existing_content = self.backend.get(self.serializer)
 
         if existing_content:
-            if self.root_type:
+            if self.instantiate_root_with_keywords:
                 existing_content = self.root_type(**existing_content)
+            else:
+                existing_content = self.root_type(existing_content)
             from syncx import tag
             wrapped = tag(existing_content)
             self.set_as_manager_for(wrapped)
@@ -79,3 +128,87 @@ class Manager:
 
     def sync(self, change_details: ChangeDetails):
         self.backend.put(self.root, self.serializer, change_location=change_details.location)
+
+    def get_history(self):
+        if self.history is None:
+            from syncx import tag
+            self.history = tag(History())
+        return self.history
+
+    def add_history_entry(self, delta):
+        history = self.get_history()
+        if not history.on:
+            return
+        if history.current_index < len(history.entries):
+            del history.entries[history.current_index:]
+        history.entries.append(delta)
+        if history._capacity and len(history.entries) > history._capacity:
+            del history.entries[:-history._capacity]
+        history.current_index = len(history.entries)
+        return history.current_index
+
+    def undo(self):
+        history = self.get_history()
+        if history.current_index == 0:
+            return history.current_index
+        history.current_index -= 1
+        delta = history.entries[history.current_index]
+        history.on = False
+        dictdiffer.revert(delta, self.root, in_place=True)
+        history.on = True
+        return history.current_index
+
+    def redo(self):
+        history = self.get_history()
+        if history.current_index == len(history.entries):
+            return history.current_index
+        delta = history.entries[history.current_index]
+        history.current_index += 1
+        history.on = False
+        dictdiffer.patch(delta, self.root, in_place=True)
+        history.on = True
+        return history.current_index
+
+    def start_transaction(self):
+        self.lock.acquire()
+        self.transactions.append(len(self.all_changes))
+
+        if self.history is not None:
+            print('HISTORY has history')
+            self.history._manager.start_transaction()
+
+    def end_transaction(self, do_rollback):
+        if self.history is not None:
+            self.history._manager.end_transaction(do_rollback)
+
+        if do_rollback:
+            starting_change_index = self.transactions.pop()
+            self.change_tracking_active = False
+            for delta in reversed(self.all_changes[starting_change_index:]):
+                dictdiffer.revert(delta, self.root, in_place=True)
+            self.all_changes = self.all_changes[:starting_change_index]
+            self.change_tracking_active = True
+
+        self.lock.release()
+
+
+class ManagerInterface:
+
+    def __init__(self, manager):
+        self._manager = manager
+
+    @property
+    def history_on(self) -> bool:
+        history = self._manager.get_history()
+        return history.on
+
+    @history_on.setter
+    def history_on(self, value: bool):
+        history = self._manager.get_history()
+        history.on = value
+
+    def undo(self):
+        return self._manager.undo()
+
+    def redo(self):
+        return self._manager.redo()

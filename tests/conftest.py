@@ -4,12 +4,8 @@ import os
 from collections import namedtuple
 from pathlib import Path
 from textwrap import dedent
-from typing import Sequence
-from typing import Union
 
 import pytest
-
-from syncx import path
 
 
 @pytest.fixture

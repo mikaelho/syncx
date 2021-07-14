@@ -1,9 +1,6 @@
 """
 Parts of these tests are intended to be copied directly to docs, thus imports etc. are repeated.
 """
-import datetime
-
-import syncx
 
 
 def test_tag(capsys):
@@ -18,6 +15,25 @@ def test_tag(capsys):
     # prints: Data was changed
 
     assert capsys.readouterr().out.strip() == "Data was changed"
+
+
+def test_history():
+    from syncx import tag, manage
+
+    my_data = {'value': 'initial'}
+    my_data = tag(my_data)
+    manage(my_data).history.on()
+
+    history = manage(my_data).history
+
+    my_data['value'] = 'changed'
+    assert my_data['value'] == 'changed'
+
+    history.undo()
+    assert my_data['value'] == 'initial'
+
+    history.redo()
+    assert my_data['value'] == 'changed'
 
 
 def test_sync__no_previous_file(run_in_tmp_path, capsys, multiline_cleaner):

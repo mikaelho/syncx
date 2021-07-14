@@ -7,8 +7,8 @@ application data whenever it is changed.
 
 Main features:
 1. Detect changes to Python data structures, from `dict`s to pydantic models.
-1. Changes autosaved to a file.
 1. Undo/redo changes.
+1. Autosave changes to a file.
 
 ## Installation
 
@@ -20,7 +20,7 @@ pypi install syncx
 
 ### Detect changes
 
-Any change to a wrapped data structure triggers a callback (here we use `print` for brevity).
+Any change to a wrapped data structure triggers a callback.
 
 ```python
 import syncx
@@ -37,13 +37,34 @@ my_data['a'][1]['d'] = 1
 (Supported data types: `dict`s (mappings), `list`s (sequences), `set`s, instances with `__dict__`,
 including dataclasses and pydantic models.)
 
+### Move backwards and forwards in the change history
+
+```python
+from syncx import tag, manage
+
+my_data = {'value': 'initial'}
+my_data = tag(my_data)
+manage(my_data).history.on()
+
+my_data['value'] = 'changed'
+assert my_data['value'] == 'changed'
+
+manage(my_data).history.undo()
+assert my_data['value'] == 'initial'
+
+manage(my_data).history.redo()
+assert my_data['value'] == 'changed'
+```
+
+(Change history is by default kept in the memory, with no limit on the amount of changes kept.)
+
 ### Sync all changes to a YAML file
 
 ```python
-import syncx
+from syncx import sync
 from pathlib import Path
 
-my_data = syncx.sync({'value': 'initial'})
+my_data = sync({'value': 'initial'})
 
 print(Path('syncx_data.yaml').read_text())
 # prints file contents:
@@ -59,9 +80,9 @@ print(Path('syncx_data.yaml').read_text())
 ### Next run picks up the changed data
 
 ```python
-import syncx
+from syncx import sync
 
-my_data = syncx.sync({'value': 'initial'})
+my_data = sync({'value': 'initial'})
 assert my_data['value'] == 'changed'
 ```
 
@@ -71,10 +92,10 @@ assert my_data['value'] == 'changed'
 
 ```python
 from pathlib import Path
-import syncx
+from syncx import sync
 from syncx.serializer import JsonSerializer
 
-my_data = syncx.sync({'value': 'initial'}, serializer=JsonSerializer)
+my_data = sync({'value': 'initial'}, serializer=JsonSerializer)
 my_data['value'] = 'changed'
 
 print(Path('syncx_data.json').read_text())
@@ -87,11 +108,11 @@ print(Path('syncx_data.json').read_text())
 ### Sync data in "any" object
 
 ```python
-import syncx
+from syncx import sync
 from pathlib import Path
 from types import SimpleNamespace as RandomCustomClass
 
-my_data = syncx.sync(RandomCustomClass(value='initial'))
+my_data = sync(RandomCustomClass(value='initial'))
 my_data.value = 'changed'
 
 print(Path('syncx_data.yaml').read_text())
@@ -113,7 +134,7 @@ from typing import List
 
 from pydantic import BaseModel
 
-import syncx
+from syncx import sync
 
 class LineItem(BaseModel):
     description: str
@@ -129,7 +150,7 @@ class Order(BaseModel):
 class OrderList(BaseModel):
     orders: List[Order] = []
 
-order_list = syncx.sync(OrderList())
+order_list = sync(OrderList())
 order = Order(customer_name='Customer', date='2021-07-03')
 order.line_items.append(LineItem(description='Widgets', units=100, amount="1.23"))
 order_list.orders.append(order)
@@ -147,7 +168,7 @@ print(Path('syncx_data.yaml').read_text())
 
 # On the "next run"
     
-order_list = syncx.sync(OrderList())
+order_list = sync(OrderList())
 
 assert order_list.orders[0].customer_name == 'Customer'
 ````
@@ -165,6 +186,13 @@ Notes:
 - Support for Django ORM models, with a change callback that saves a Django model to DB
 - Use with a UI framework, autoupdate UI whenever data changes
 - Peer-to-peer syncing of data
+
+## Do not use syncx when...
+
+- Performance is the main consideration
+- Complex queries over large datasets are needed
+- Data does not fit in the memory  
+- "Magic" code is bad (often same as having a large project)
 
 ## Similar projects
 
