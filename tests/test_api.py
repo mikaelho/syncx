@@ -6,11 +6,11 @@ Parts of these tests are intended to be copied directly to docs, thus imports et
 def test_tag(capsys):
     import syncx
 
-    def ping(details):
+    def callback(details):
         print('Data was changed')
 
     my_data = {'a': ['b', {'c': 0}]}
-    my_data = syncx.tag(my_data, ping)
+    my_data = syncx.tag(my_data, callback)
     my_data['a'][1]['d'] = 1
     # prints: Data was changed
 
@@ -18,22 +18,30 @@ def test_tag(capsys):
 
 
 def test_history():
-    from syncx import tag, manage
+    from syncx import tag, undo, redo
 
-    my_data = {'value': 'initial'}
-    my_data = tag(my_data)
-    manage(my_data).history.on()
-
-    history = manage(my_data).history
+    my_data = tag({'value': 'initial'}, history=True)
 
     my_data['value'] = 'changed'
     assert my_data['value'] == 'changed'
 
-    history.undo()
+    undo(my_data)
     assert my_data['value'] == 'initial'
 
-    history.redo()
+    redo(my_data)
     assert my_data['value'] == 'changed'
+
+
+def test_transaction():
+    from syncx import tag, rollback
+
+    my_data = tag({'value': 'initial'})
+
+    with my_data:
+        my_data['value'] = 'changed'
+        rollback()  # This is explicit rollback of any changes; could also be caused by any exception
+
+    assert my_data['value'] == 'initial'
 
 
 def test_sync__no_previous_file(run_in_tmp_path, capsys, multiline_cleaner):

@@ -23,13 +23,14 @@ pypi install syncx
 Any change to a wrapped data structure triggers a callback.
 
 ```python
-import syncx
+from syncx import tag
 
-def ping(details):
+def callback(details):
     print('Data was changed')
 
 my_data = {'a': ['b', {'c': 0}]}
-my_data = syncx.tag(my_data, ping)
+my_data = tag(my_data, callback)
+
 my_data['a'][1]['d'] = 1
 # prints: Data was changed
 ```
@@ -40,25 +41,39 @@ including dataclasses and pydantic models.)
 ### Move backwards and forwards in the change history
 
 ```python
-from syncx import tag, manage
+from syncx import tag, undo, redo
 
-my_data = {'value': 'initial'}
-my_data = tag(my_data)
-manage(my_data).history.on()
+my_data = tag({'value': 'initial'}, history=True)  # Start recording change history
 
 my_data['value'] = 'changed'
 assert my_data['value'] == 'changed'
 
-manage(my_data).history.undo()
+undo(my_data)
 assert my_data['value'] == 'initial'
 
-manage(my_data).history.redo()
+redo(my_data)
 assert my_data['value'] == 'changed'
 ```
 
 (Change history is by default kept in the memory, with no limit on the amount of changes kept.)
 
-### Sync all changes to a YAML file
+### Make all changes or none (a.k.a. transactions)
+
+```python
+from syncx import tag, rollback
+
+my_data = tag({'value': 'initial'})
+
+with my_data:
+    my_data['value'] = 'changed'
+    rollback()  # This is explicit rollback of any changes; could also be caused by any exception
+
+assert my_data['value'] == 'initial'
+```
+
+(Useful for e.g. coordinating changes between different data structures.)
+
+### Sync all changes to a file
 
 ```python
 from syncx import sync
@@ -77,6 +92,8 @@ print(Path('syncx_data.yaml').read_text())
 #     value: changed
 ```
 
+(Default format is YAML, useful for configuration files and such.)
+
 ### Next run picks up the changed data
 
 ```python
@@ -88,7 +105,7 @@ assert my_data['value'] == 'changed'
 
 (This is already pretty functional for applications with a smallish amount of data.)
 
-### You can use a different serializer
+### Use a different serializer
 
 ```python
 from pathlib import Path
@@ -103,7 +120,7 @@ print(Path('syncx_data.json').read_text())
 #     {"value":"changed"}
 ```
 
-(Alas, `set` is not supported in json. `ujson` is used if installed.)
+(`ujson` is used if installed. Remember, no `set`s in json.)
 
 ### Sync data in "any" object
 

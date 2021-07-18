@@ -7,6 +7,7 @@ from typing import Optional
 import dictdiffer
 from syncx.backend import Backend
 from syncx.backend import FileBackend
+from syncx.exceptions import HistoryError
 from syncx.exceptions import Rollback
 from syncx.history import History
 from syncx.serializer import Serializer
@@ -56,7 +57,7 @@ class Manager:
             return original_function(*args, **kwargs)
 
         need_all_changes = bool(len(self.transactions))
-        need_history = self.history is not None and self.history.on
+        need_history = self.history and self.history.on
         need_delta = any((need_all_changes, need_history))
 
         diff_location = dictdiffer.dot_lookup(self.root, path)
@@ -129,14 +130,16 @@ class Manager:
     def sync(self, change_details: ChangeDetails):
         self.backend.put(self.root, self.serializer, change_location=change_details.location)
 
-    def get_history(self):
+    def set_history(self):
         if self.history is None:
             from syncx import tag
             self.history = tag(History())
         return self.history
 
     def add_history_entry(self, delta):
-        history = self.get_history()
+        if not self.history:
+            raise HistoryError('History not active when trying to add an entry')
+        history = self.history
         if not history.on:
             return
         if history.current_index < len(history.entries):
@@ -148,7 +151,7 @@ class Manager:
         return history.current_index
 
     def undo(self):
-        history = self.get_history()
+        history = self.check_history()
         if history.current_index == 0:
             return history.current_index
         history.current_index -= 1
@@ -159,7 +162,7 @@ class Manager:
         return history.current_index
 
     def redo(self):
-        history = self.get_history()
+        history = self.check_history()
         if history.current_index == len(history.entries):
             return history.current_index
         delta = history.entries[history.current_index]
@@ -169,12 +172,17 @@ class Manager:
         history.on = True
         return history.current_index
 
+    def check_history(self):
+        history = self.history
+        if not history or not history.on:
+            raise HistoryError('History not active when trying to undo or redo')
+        return history
+
     def start_transaction(self):
         self.lock.acquire()
         self.transactions.append(len(self.all_changes))
 
         if self.history is not None:
-            print('HISTORY has history')
             self.history._manager.start_transaction()
 
     def end_transaction(self, do_rollback):
@@ -198,13 +206,13 @@ class ManagerInterface:
         self._manager = manager
 
     @property
-    def history_on(self) -> bool:
-        history = self._manager.get_history()
+    def history(self) -> bool:
+        history = self._manager.set_history()
         return history.on
 
-    @history_on.setter
-    def history_on(self, value: bool):
-        history = self._manager.get_history()
+    @history.setter
+    def history(self, value: bool):
+        history = self._manager.set_history()
         history.on = value
 
     def undo(self):

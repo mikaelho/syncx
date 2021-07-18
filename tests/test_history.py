@@ -1,90 +1,97 @@
+import pytest
+
 import dictdiffer
-import syncx.exceptions
+from syncx import redo
 from syncx import tag
-from syncx.history import History
-from syncx.wrappers import CustomObjectWrapper
+from syncx import undo
+from syncx.exceptions import HistoryError
 
 
 def test_history_indexing(mock_func):
     mock_func(dictdiffer, 'patch')
 
-    history = History({})
+    manager = tag({}, history=True)._manager
 
-    assert history.add_entry(1) == 1
-    assert history.data.entries == [1]
+    assert manager.add_history_entry(1) == 1
+    assert manager.history.entries == [1]
 
-    assert history.add_entry(2) == 2
-    assert history.data.entries == [1, 2]
+    assert manager.add_history_entry(2) == 2
+    assert manager.history.entries == [1, 2]
 
-    assert history.undo() == 1
+    assert manager.undo() == 1
 
-    assert history.redo() == 2
+    assert manager.redo() == 2
 
-    assert history.redo() == 2
+    assert manager.redo() == 2
 
-    assert history.undo() == 1
-    assert history.add_entry(3) == 2
-    assert history.data.entries == [1, 3]
+    assert manager.undo() == 1
+    assert manager.add_history_entry(3) == 2
+    assert manager.history.entries == [1, 3]
 
-    history.undo()
-    assert history.undo() == 0
-    assert history.undo() == 0
+    manager.undo()
+    assert manager.undo() == 0
+    assert manager.undo() == 0
 
-    assert history.add_entry(4) == 1
-    assert history.data.entries == [4]
+    assert manager.add_history_entry(4) == 1
+    assert manager.history.entries == [4]
+
+
+def test_history_used_before_activated():
+    tagged = tag({})
+    with pytest.raises(HistoryError):
+        undo(tagged)
 
 
 def test_history_patching():
     data = {'a': 1}
-    history = History(data)
-    history.add_entry([('add', '', [('a', 1)])])
+    manager = tag(data, history=True)._manager
+    manager.add_history_entry([('add', '', [('a', 1)])])
 
-    history.undo()
+    manager.undo()
     assert data == {}
 
-    history.redo()
+    manager.redo()
     assert data == {'a': 1}
 
 
 def test_history_capacity(mock_func):
     mock_func(dictdiffer, 'patch')
+    manager = tag({})._manager
+    manager.set_history()._capacity = 4
 
-    history = History({}, capacity=4)
+    [manager.add_history_entry(entry) for entry in range(4)]
+    assert manager.history.entries == [0, 1, 2, 3]
 
-    [history.add_entry(entry) for entry in range(4)]
-    assert history.data.entries == [0, 1, 2, 3]
+    manager.add_history_entry(4)
+    assert manager.history.entries == [1, 2, 3, 4]
 
-    history.add_entry(4)
-    assert history.data.entries == [1, 2, 3, 4]
-
-    history.undo()
-    history.add_entry(5)
-    history.add_entry(6)
-    assert history.data.entries == [2, 3, 5, 6]
+    manager.undo()
+    manager.add_history_entry(5)
+    manager.add_history_entry(6)
+    assert manager.history.entries == [2, 3, 5, 6]
 
 
-def test_history_wrapping_and_rollback(mock_func):
-    mock_func(dictdiffer, 'patch')
+def test_undo_redo():
+    my_data = tag({'a': ['b', {'c': 0, 'd': 1}], 'e': {1}}, history=True)
 
-    history = tag(History({}))
-    assert type(history) is CustomObjectWrapper
+    my_data['e'].add(2)
+    assert 2 in my_data['e']
 
-    history.add_entry('first entry')
-    assert history._manager.all_changes == []
+    undo(my_data)
+    assert my_data == {'a': ['b', {'c': 0, 'd': 1}], 'e': {1}}
 
-    with history:
-        history.add_entry('second entry')
-        assert history._manager.all_changes == [
-            [('add', '__dict__.data.__dict__.entries', [(1, 'second entry')])],
-            [('change', '__dict__.data.__dict__.current_index', (1, 2))],
-        ]
-        raise syncx.exceptions.Rollback()
+    my_data['a'][1]['c'] = 3
+    assert my_data['a'][1]['c'] == 3
 
-    assert history._manager.all_changes == []
-    assert history.data.current_index == 1
+    undo(my_data)
+    assert my_data['a'][1]['c'] == 0
 
-    # assert history._manager.all_changes == [
-    #     [('add', '__dict__.data.__dict__.entries', [(0, 'dummy entry')])],
-    #     [('change', '__dict__.data.__dict__.current_index', (0, 1))],
-    #     [('change', '__dict__.data.__dict__.__dict__.current_index', (1, 0))]
-    # ]
+    redo(my_data)
+    assert my_data['a'][1]['c'] == 3
+
+    my_data['a'][1]['c'] = {'f': 3}
+    assert my_data['a'][1]['c'] == {'f': 3}
+
+    my_data['a'][1]['c']['f'] = 4
+    undo(my_data)
+    assert my_data['a'][1]['c']['f'] == 3

@@ -5,7 +5,6 @@ import pytest
 from syncx import rollback
 from syncx import tag
 from syncx import untag
-from syncx.exceptions import Rollback
 from syncx.manager import Manager
 from syncx.wrappers import CustomObjectWrapper
 from syncx.wrappers import DictWrapper
@@ -13,11 +12,11 @@ from syncx.wrappers import ListWrapper
 from syncx.wrappers import SetWrapper
 
 
-def check_callback(wrapped, callback):
+def check_callback(wrapped, callback, expected_path=None):
     assert len(callback.calls) == 1
     details = callback.calls[0].args[0]
     assert details.location is wrapped
-    assert details.path_to_location == []
+    assert details.path_to_location == (expected_path or [])
 
 
 def test_dict(mock_simple):
@@ -44,16 +43,6 @@ def test_set(mock_simple):
     check_callback(wrapped, mock_simple)
 
 
-def test_custom_object(mock_simple):
-    wrapped = tag(SimpleNamespace(test='initial value'), mock_simple)
-    assert type(wrapped) is CustomObjectWrapper
-    wrapped.test = 'value'
-
-    check_callback(wrapped, mock_simple)
-
-    assert wrapped._manager.root_type is SimpleNamespace
-
-
 def test_inherited_from_list(mock_simple):
     class CustomList(list):
         pass
@@ -70,11 +59,21 @@ def test_inherited_from_list(mock_simple):
     assert wrapped._manager.root_type is CustomList
 
 
+def test_custom_object(mock_simple):
+    wrapped = tag(SimpleNamespace(test='initial value'), mock_simple)
+    assert type(wrapped) is CustomObjectWrapper
+    wrapped.test = 'value'
+
+    check_callback(wrapped.__dict__, mock_simple, ['__dict__'])
+
+    assert wrapped._manager.root_type is SimpleNamespace
+
+
 def test_type(mock_simple):
     wrapped = tag(SimpleNamespace, mock_simple)
     wrapped.test = 'value'
 
-    check_callback(wrapped, mock_simple)
+    check_callback(wrapped.__dict__, mock_simple, ['__dict__'])
 
     assert wrapped._manager.root_type is SimpleNamespace
 
