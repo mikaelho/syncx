@@ -8,12 +8,11 @@ import dictdiffer
 from syncx.backend import Backend
 from syncx.backend import FileBackend
 from syncx.exceptions import HistoryError
-from syncx.exceptions import Rollback
+from syncx.exceptions import LockingRaceCondition
 from syncx.history import History
 from syncx.serializer import Serializer
 from syncx.serializer import YamlSerializer
-from syncx.wrappers import CustomObjectWrapper
-from syncx.wrappers import is_wrapped
+from syncx.utils import flatten
 
 
 @dataclass
@@ -32,6 +31,8 @@ class Manager:
     default_serializer = YamlSerializer
     default_backend = FileBackend
     default_name = 'syncx_data'
+
+    LOCK_TIMEOUT = 1.0
 
     def __init__(self, did_change_callback=None, will_change_callback=None):
         self.lock = threading.RLock()
@@ -127,8 +128,8 @@ class Manager:
 
         return wrapped
 
-    def sync(self, change_details: ChangeDetails):
-        self.backend.put(self.root, self.serializer, change_location=change_details.location)
+    def sync(self, delta: Any):
+        self.backend.put(self.root, self.serializer, delta=delta)
 
     def set_history(self):
         if self.history is None:
@@ -178,8 +179,12 @@ class Manager:
             raise HistoryError('History not active when trying to undo or redo')
         return history
 
+    def lock_acquire(self):
+        if not self.lock.acquire(timeout=self.LOCK_TIMEOUT):
+            raise LockingRaceCondition(f'Trying to acquire lock for: {self.root}')
+
     def start_transaction(self):
-        self.lock.acquire()
+        self.lock_acquire()
         self.transactions.append(len(self.all_changes))
 
         if self.history is not None:
@@ -189,13 +194,17 @@ class Manager:
         if self.history is not None:
             self.history._manager.end_transaction(do_rollback)
 
+        starting_change_index = self.transactions.pop()
+
         if do_rollback:
-            starting_change_index = self.transactions.pop()
             self.change_tracking_active = False
             for delta in reversed(self.all_changes[starting_change_index:]):
                 dictdiffer.revert(delta, self.root, in_place=True)
             self.all_changes = self.all_changes[:starting_change_index]
             self.change_tracking_active = True
+        elif self.backend and not self.transactions:
+            combined_delta = flatten(self.all_changes[starting_change_index:])
+            self.sync(combined_delta)
 
         self.lock.release()
 
@@ -204,6 +213,9 @@ class ManagerInterface:
 
     def __init__(self, manager):
         self._manager = manager
+
+    def explain(self):
+        ...  # TODO: Create
 
     @property
     def history(self) -> bool:
@@ -214,9 +226,3 @@ class ManagerInterface:
     def history(self, value: bool):
         history = self._manager.set_history()
         history.on = value
-
-    def undo(self):
-        return self._manager.undo()
-
-    def redo(self):
-        return self._manager.redo()

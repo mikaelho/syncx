@@ -35,6 +35,8 @@ class NotifyWrapper(ObjectWrapper):
     def __enter__(self):
         self._manager.start_transaction()
 
+        return self
+
     def __exit__(self, exc_type, exc_value, traceback):
         self._manager.end_transaction(do_rollback=bool(exc_type))
 
@@ -100,7 +102,9 @@ for wrapper_type in mutating_methods:
 
             original_function = getattr(self.__subject__, tracker_function_name)
 
-            with self._manager.lock:
+            self._manager.lock_acquire()
+            try:
+
                 result = self._manager.execute_change(
                     self._path,
                     original_function,
@@ -108,7 +112,10 @@ for wrapper_type in mutating_methods:
                     kwargs,
                 )
                 wrap_members(self)
-            return result
+                return result
+
+            finally:
+                self._manager.lock.release()
 
         setattr(wrapper_type, func_name, func)
         getattr(wrapper_type, func_name).__name__ = func_name
