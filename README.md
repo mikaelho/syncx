@@ -66,12 +66,15 @@ my_data = tag({'value': 'initial'})
 
 with my_data:
     my_data['value'] = 'changed'
-    rollback()  # This is explicit rollback of any changes; could also be caused by any exception
+    rollback()  # Explicit reversal of any changes; could also be caused by any exception
 
 assert my_data['value'] == 'initial'
 ```
 
-(Useful for e.g. coordinating changes between different data structures.)
+Features:
+- No changes applied if there is an error.
+- Thread-safe.
+- Changes saved only at the end of the block.
 
 ### Sync all changes to a file
 
@@ -206,11 +209,25 @@ Notes:
 
 ## Do not use syncx when...
 
+When going beyond the simple change callback, `syncx` does the useful things it does by pessimistic
+locking, copying data and a lot of dict traversing in the background. This is probably too much
+for use cases where:
+
 - Performance is the main consideration
 - Complex queries over large datasets are needed
-- Data does not fit in the memory  
-- "Magic" code is bad (often same as having a large project)
+- Data does not fit in the memory
+- Memory usage is a concern overall
+
+You might also avoid `syncx` if you consider all "magic" code bad, a.k.a. "explicit is better than
+implicit" - this is often the same as having a large project with a lot of contributors.
+  
+## Key enabling packages
+
+- [ProxyTypes](https://pypi.org/project/ProxyTypes/)
+- [dictdiffer](https://pypi.org/project/dictdiffer/)
 
 ## Similar projects
 
 - [CleverDict](https://pypi.org/project/cleverdict/)
+- [Versioned Dictionaries](https://pypi.org/project/versioned-dictionary/)
+- [VersionDict](https://github.com/jsbueno/extradict)
