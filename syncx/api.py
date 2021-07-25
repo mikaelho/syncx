@@ -1,6 +1,8 @@
 import copy
 from typing import Any
+from typing import Type
 from typing import TypeVar
+from typing import Union
 
 from syncx.backend import Backend
 from syncx.exceptions import Rollback
@@ -58,7 +60,7 @@ def manage(tagged: Any):
 def sync(
     target: T,
     name: str = None,
-    serializer: Serializer = None,
+    serializer: Union[Serializer, Type[Serializer]] = None,
     backend: Backend = None,
     history: bool = False,
 ) -> T:
