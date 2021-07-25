@@ -1,22 +1,9 @@
 import io
-from io import IOBase
-from io import StringIO
 from pathlib import Path
 from typing import Any
 from typing import Protocol
 
 from syncx.serializer import Serializer
-
-
-def streamify(value: Any) -> io.IOBase:
-    if isinstance(value, io.IOBase):
-        return value
-    elif type(value) is str:
-        return io.StringIO(value)
-    elif type(value) is bytes:
-        return io.BytesIO(value)
-    else:
-        raise TypeError(f'Cannot turn value of type {type(value)} into a stream', value)
 
 
 class Backend(Protocol):
@@ -26,7 +13,7 @@ class Backend(Protocol):
         Initialize the backend with a name.
         """
 
-    def put(self, root: Any, serializer: Serializer, change_location: Any = None, key: str = None):
+    def put(self, root: Any, serializer: Serializer, delta: Any = None):
         """
         Write/send value to the backend provider, with an optional key.
         """
@@ -45,7 +32,7 @@ class FileBackend:
     def _get_file(self, serializer: Serializer) -> Path:
         return Path(f'{self.filename}.{serializer.file_extension}')
 
-    def put(self, root: Any, serializer: Serializer, change_location: Any = None, key: str = None):
+    def put(self, root: Any, serializer: Serializer, delta: Any = None):
         file = self._get_file(serializer)
         stream = io.StringIO()
         serializer.dump(root, stream)
