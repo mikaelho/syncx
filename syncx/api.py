@@ -59,7 +59,7 @@ def manage(tagged: Any):
 
 def sync(
     target: T,
-    name: str = None,
+    name: str,
     serializer: Union[Serializer, Type[Serializer]] = None,
     backend: Backend = None,
     history: bool = False,

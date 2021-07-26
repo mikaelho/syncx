@@ -30,7 +30,7 @@ class FileBackend:
         self.filename = name
 
     def _get_file(self, serializer: Serializer) -> Path:
-        return Path(f'{self.filename}.{serializer.file_extension}')
+        return Path(self.filename)
 
     def put(self, root: Any, serializer: Serializer, delta: Any = None):
         file = self._get_file(serializer)

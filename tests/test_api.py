@@ -3,6 +3,42 @@ Parts of these tests are intended to be copied directly to docs, thus imports et
 """
 
 
+def test_sync__initial_run(run_in_tmp_path):
+
+    my_data = {'value': 'initial'}
+
+    from syncx import sync
+
+    my_data = sync(my_data, 'data.yaml')
+
+    from pathlib import Path
+    data_file = Path('data.yaml')
+
+    assert data_file.read_text().strip() == 'value: initial'
+
+    my_data['value'] = 'changed'
+
+    assert data_file.read_text().strip() == 'value: changed'
+
+
+def test_sync__next_run(run_in_tmp_path):
+    from syncx import sync
+    sync({'value': 'changed'}, 'data.yaml')
+
+    my_data = sync({'value': 'initial'}, 'data.yaml')
+    assert my_data['value'] == 'changed'
+
+
+def test_sync__json(run_in_tmp_path):
+    from pathlib import Path
+    from syncx import sync
+
+    my_data = sync({'value': 'initial'}, 'data.json')
+    my_data['value'] = 'changed'
+
+    assert Path('data.json').read_text().strip() == '{"value":"changed"}'
+
+
 def test_tag(capsys):
     import syncx
 
@@ -44,69 +80,20 @@ def test_transaction():
     assert my_data['value'] == 'initial'
 
 
-def test_sync__no_previous_file(run_in_tmp_path, capsys, multiline_cleaner):
-    import syncx
-    from pathlib import Path
-
-    my_data = syncx.sync({'value': 'initial'})
-
-    print(Path('syncx_data.yaml').read_text())
-    # prints file contents:
-    # value: initial
-
-    my_data['value'] = 'changed'
-
-    print(Path('syncx_data.yaml').read_text())
-    # prints file contents:
-    # value: changed
-
-    assert capsys.readouterr().out.strip() == multiline_cleaner(
-        """
-        value: initial
-        
-        value: changed"""
-    )
-
-
-def test_sync__next_run(run_in_tmp_path):
-    import syncx
-    my_data = syncx.sync({'value': 'initial'})
-    my_data['value'] = 'changed'
-
-    import syncx
-
-    my_data = syncx.sync({'value': 'initial'})
-    assert my_data['value'] == 'changed'
-
-
-def test_sync__with_json(run_in_tmp_path, capsys):
-    from pathlib import Path
-    import syncx
-    from syncx.serializer import JsonSerializer
-
-    my_data = syncx.sync({'value': 'initial'}, serializer=JsonSerializer)
-    my_data['value'] = 'changed'
-
-    print(Path('syncx_data.json').read_text())
-    # prints file contents:
-    # {"value":"changed"}
-
-    assert capsys.readouterr().out.strip() == '{"value":"changed"}'
-
-
-def test_sync__custom_object(run_in_tmp_path, capsys):
-    import syncx
+def test_sync__custom_object(run_in_tmp_path):
+    from syncx import sync
     from pathlib import Path
     from types import SimpleNamespace as RandomCustomClass
 
-    my_data = syncx.sync(RandomCustomClass(value='initial'))
+    my_data = sync(RandomCustomClass(value='initial'), 'data.yaml')
     my_data.value = 'changed'
 
-    print(Path('syncx_data.yaml').read_text())
-    # prints file contents:
-    # value: changed
+    assert Path('data.yaml').read_text().strip() == 'value: changed'
 
-    assert capsys.readouterr().out.strip() == 'value: changed'
+    next_run_data = sync(RandomCustomClass(value='initial'), 'data.yaml')
+
+    assert next_run_data.value == 'changed'
+    assert type(next_run_data.__subject__) is RandomCustomClass
 
 
 def test_sync__pydantic_model(run_in_tmp_path, capsys, multiline_cleaner):
@@ -118,7 +105,7 @@ def test_sync__pydantic_model(run_in_tmp_path, capsys, multiline_cleaner):
 
     from pydantic import BaseModel
 
-    import syncx
+    from syncx import sync
 
     class LineItem(BaseModel):
         description: str
@@ -134,12 +121,12 @@ def test_sync__pydantic_model(run_in_tmp_path, capsys, multiline_cleaner):
     class OrderList(BaseModel):
         orders: List[Order] = []
 
-    order_list = syncx.sync(OrderList())
+    order_list = sync(OrderList(), 'data.yaml')
     order = Order(customer_name='Customer', date='2021-07-03')
     order.line_items.append(LineItem(description='Widgets', units=100, amount="1.23"))
     order_list.orders.append(order)
 
-    print(Path('syncx_data.yaml').read_text())
+    print(Path('data.yaml').read_text())
     # prints file contents:
     # orders:
     # - customer_name: Customer
@@ -150,7 +137,7 @@ def test_sync__pydantic_model(run_in_tmp_path, capsys, multiline_cleaner):
     #     description: Widgets
     #     units: 100
 
-    next_run_order_list = syncx.sync(OrderList())
+    next_run_order_list = sync(OrderList(), 'data.yaml')
 
     assert next_run_order_list.orders[0].customer_name == 'Customer'
 

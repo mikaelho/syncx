@@ -4,6 +4,15 @@ from syncx import manage
 from syncx import tag
 from syncx.manager import Manager
 from syncx.manager import ManagerInterface
+from syncx.serializer import JsonSerializer
+from syncx.serializer import YamlSerializer
+
+
+def test_get_serializer():
+    assert Manager.get_serializer('foo') is YamlSerializer
+    assert Manager.get_serializer('foo.yml') is YamlSerializer
+    assert Manager.get_serializer('foo.yaml') is YamlSerializer
+    assert Manager.get_serializer('foo.json') is JsonSerializer
 
 
 def test_interface():
@@ -22,7 +31,7 @@ def test_start_sync__defaults(get_test_data_file, tmp_path):
     my_data = {'a': ['b', {'c': 0, 'd': 1}], 'e': {1}}
     manager = Manager()
     already_wrapped = tag(my_data)
-    wrapped = manager.start_sync(already_wrapped, str(tmp_path / 'test'))
+    wrapped = manager.start_sync(already_wrapped, str(tmp_path / 'test.yaml'))
 
     assert wrapped == already_wrapped
     assert (tmp_path / 'test.yaml').read_text() == expected_contents
@@ -30,7 +39,7 @@ def test_start_sync__defaults(get_test_data_file, tmp_path):
 
 def test_start_sync__file_exists(path_to_test_data):
     initial_data = tag({})
-    name = str(path_to_test_data / 'dump')
+    name = str(path_to_test_data / 'dump.yaml')
     wrapped = initial_data._manager.start_sync(initial_data, name)
 
     assert wrapped == {'a': ['b', {'c': 0, 'd': 1}], 'e': {1}}
@@ -39,7 +48,7 @@ def test_start_sync__file_exists(path_to_test_data):
 def test_start_sync__file_exists__custom_type(path_to_test_data):
     initial_data = tag(SimpleNamespace)
 
-    name = str(path_to_test_data / 'dump')
+    name = str(path_to_test_data / 'dump.yaml')
     wrapped = initial_data._manager.start_sync(initial_data, name)
 
     assert wrapped.a == ['b', {'c': 0, 'd': 1}]

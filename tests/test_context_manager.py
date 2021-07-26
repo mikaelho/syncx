@@ -206,7 +206,7 @@ def test_race_condition():
 def test_save_at_the_end(mock_func):
     mock_func(FileBackend, 'get', None)
     mock_put = mock_func(FileBackend, 'put')
-    data = sync({'value': 'initial'})
+    data = sync({'value': 'initial'}, 'data.yaml')
 
     with data:
         data['value'] = 'changed'
@@ -223,7 +223,7 @@ def test_save_at_the_end(mock_func):
 def test_no_save_on_rollback(mock_func):
     mock_func(FileBackend, 'get', None)
     mock_put = mock_func(FileBackend, 'put')
-    data = sync({'value': 'initial'})
+    data = sync({'value': 'initial'}, 'data.yaml')
 
     with data:
         data['value'] = 'changed'

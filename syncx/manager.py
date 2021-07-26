@@ -1,6 +1,7 @@
 import copy
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from typing import Optional
 
@@ -10,6 +11,7 @@ from syncx.backend import FileBackend
 from syncx.exceptions import HistoryError
 from syncx.exceptions import LockingRaceCondition
 from syncx.history import History
+from syncx.serializer import JsonSerializer
 from syncx.serializer import Serializer
 from syncx.serializer import YamlSerializer
 from syncx.utils import flatten
@@ -30,7 +32,7 @@ class Manager:
 
     default_serializer = YamlSerializer
     default_backend = FileBackend
-    default_name = 'syncx_data'
+    default_name = 'data.yaml'
 
     LOCK_TIMEOUT = 1.0
 
@@ -106,7 +108,7 @@ class Manager:
         backend: Backend = None
     ):
         self.name = name or self.default_name
-        self.serializer = serializer or self.default_serializer
+        self.serializer = serializer or self.get_serializer(name)
         self.backend = backend or self.default_backend
         if type(self.serializer) is type:
             self.serializer = self.serializer()
@@ -127,6 +129,18 @@ class Manager:
             self.backend.put(wrapped, self.serializer)
 
         return wrapped
+
+    @classmethod
+    def get_serializer(cls, name: str):
+        path = Path(name)
+        suffix = path.suffix.lower()[1:]  # Strip the dot
+
+        if suffix in ['yml', 'yaml']:
+            return YamlSerializer
+        elif suffix == 'json':
+            return JsonSerializer
+        else:
+            return cls.default_serializer
 
     def sync(self, delta: Any):
         self.backend.put(self.root, self.serializer, delta=delta)

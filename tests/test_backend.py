@@ -5,7 +5,7 @@ from syncx.serializer import YamlSerializer
 def test_file__put(get_test_data_file, tmp_path):
     expected_contents = get_test_data_file('dump.yaml')
     serializer = YamlSerializer()
-    backend = FileBackend(str(tmp_path / 'test'))
+    backend = FileBackend(str(tmp_path / 'test.yaml'))
     my_data = {'a': ['b', {'c': 0, 'd': 1}], 'e': {1}}
     backend.put(my_data, serializer)
 
@@ -15,7 +15,7 @@ def test_file__put(get_test_data_file, tmp_path):
 def test_file__get(path_to_test_data):
     expected_data = {'a': ['b', {'c': 0, 'd': 1}], 'e': {1}}
     serializer = YamlSerializer()
-    backend = FileBackend(str(path_to_test_data / 'dump'))
+    backend = FileBackend(str(path_to_test_data / 'dump.yaml'))
     data = backend.get(serializer)
 
     assert data == expected_data
