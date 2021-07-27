@@ -26,14 +26,18 @@ class MockFunc:
     def __init__(self):
         self.args = self.kwargs = None
         self.calls = []
+        self.return_value = None
+        self.exception = None
 
     def __call__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
         self.calls.append(Call(args or None, kwargs or None))
 
-        if hasattr(self, 'return_value'):
-            return self.return_value
+        if self.exception:
+            raise self.exception
+
+        return self.return_value
 
 
 @pytest.fixture
@@ -45,9 +49,10 @@ def mock_simple():
 def mock_func(monkeypatch):
     """Call fixture with the target, key and an optional return_value. Returns a mocked function."""
 
-    def get_mock(obj, key, return_value=None):
+    def get_mock(obj, key, return_value=None, exception=None):
         monkey_func = MockFunc()
         monkey_func.return_value = return_value
+        monkey_func.exception = exception
         monkeypatch.setattr(obj, key, monkey_func)
         return monkey_func
     return get_mock
