@@ -1,4 +1,5 @@
 import io
+import tempfile
 from pathlib import Path
 from typing import Any
 from typing import Protocol
@@ -29,22 +30,30 @@ class FileBackend:
     def __init__(self, name: str):
         self.filename = name
 
-    def _get_file(self, serializer: Serializer) -> Path:
-        return Path(self.filename)
-
     def put(self, root: Any, serializer: Serializer, delta: Any = None):
-        file = self._get_file(serializer)
+        """
+        Writes contents first to a temporary file to avoid empty/corrupted contents in case of an error.
+        """
         stream = io.StringIO()
         serializer.dump(root, stream)
-        file.write_text(stream.getvalue())
+
+        _, temporary_file_path = tempfile.mkstemp(text=True)
+        temporary_file = Path(temporary_file_path)
+        try:
+            temporary_file.write_text(stream.getvalue())
+        except:
+            temporary_file.unlink()
+            raise
+        temporary_file.replace(self.filename)
+
 
     def get(self, serializer: Serializer, key: str = None) -> Any:
         """
         Returns the file contents as de-serialized data, or None if file does not exist or is empty.
         """
-        file = self._get_file(serializer)
+        file = Path(self.filename)
         try:
             stream = io.StringIO(file.read_text())
             return serializer.load(stream)
-        except (EOFError, FileNotFoundError):
+        except (FileNotFoundError, EOFError):
             return None
